@@ -11,7 +11,6 @@ type Job = {
   title: string;
   description: string | null;
   requirements: string | null;
-  salary_range: string | null;
   experience_level: number;
   employer_id: string;
   employer: {
@@ -55,7 +54,6 @@ export default function JobDetailsScreen() {
       setLoading(true);
       console.log('Fetching job with ID:', id);
 
-      // Fetch job with employer details in a single query
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
         .select(`
@@ -83,10 +81,22 @@ export default function JobDetailsScreen() {
       }
 
       console.log('Job data:', jobData);
-      setJob(jobData);
+      
+      // Transform the data to match the Job type
+      const transformedJob: Job = {
+        id: jobData.id,
+        title: jobData.title,
+        description: jobData.description,
+        requirements: jobData.requirements,
+        employer_id: jobData.employer_id,
+        experience_level: jobData.experience_level,
+        employer: jobData.employer?.[0] || null
+      };
+
+      setJob(transformedJob);
     } catch (error) {
       console.error('Error in fetchJobDetails:', error);
-      setError(error.message || 'Failed to load job details');
+      setError(error instanceof Error ? error.message : 'Failed to load job details');
     } finally {
       setLoading(false);
     }
@@ -150,7 +160,7 @@ export default function JobDetailsScreen() {
       // Check for existing application with error logging
       const { data: existingApp, error: checkError } = await supabase
         .from('applications')
-        .select('id')
+        .select('id, status')
         .eq('job_id', id)
         .eq('applicant_profile_id', applicantProfile.id)
         .maybeSingle();
@@ -163,7 +173,11 @@ export default function JobDetailsScreen() {
       }
 
       if (existingApp) {
-        throw new Error('You have already applied for this job');
+        // Instead of throwing an error, update the UI state
+        setHasApplied(true);
+        setApplicationStatus(existingApp.status);
+        setError('You have already applied for this job. You can view the status in your applications.');
+        return;
       }
 
       // Submit application with error logging

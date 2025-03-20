@@ -99,37 +99,50 @@ export default function ProfileScreen() {
       setLoading(true);
       setError(null);
 
+      if (!session?.user?.id) {
+        throw new Error('No user session found');
+      }
+
       // First check if profile exists
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: checkError } = await supabase
         .from('applicant_profiles')
         .select('id')
-        .eq('user_id', session?.user.id)
+        .eq('user_id', session.user.id)
         .single();
 
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking profile:', checkError);
+        throw checkError;
+      }
+
       const profileData = {
-        user_id: session?.user.id,
-        full_name: profile.fullName,
-        phone: profile.phone,
-        location: profile.location,
-        title: profile.title,
-        about: profile.about,
+        user_id: session.user.id,
+        full_name: profile.fullName.trim(),
+        phone: profile.phone.trim(),
+        location: profile.location.trim(),
+        title: profile.title.trim(),
+        about: profile.about.trim(),
         resume_url: resumeUrl,
-        updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       let error;
       if (existingProfile) {
-        // Update existing profile
+        console.log('Updating existing profile...');
         const { error: updateError } = await supabase
           .from('applicant_profiles')
           .update(profileData)
-          .eq('user_id', session?.user.id);
+          .eq('user_id', session.user.id)
+          .select()
+          .single();
         error = updateError;
       } else {
-        // Insert new profile
+        console.log('Creating new profile...');
         const { error: insertError } = await supabase
           .from('applicant_profiles')
-          .insert([profileData]);
+          .insert([profileData])
+          .select()
+          .single();
         error = insertError;
       }
 

@@ -3,18 +3,41 @@ import { Button, Text, Card, HelperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function RoleSelectScreen() {
   const router = useRouter();
-  const { session } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { session, loading: authLoading } = useAuth();
+  const [roleSelectLoading, setRoleSelectLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check session and refresh if needed
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Session check error:', error);
+        router.replace('/(auth)/login');
+        return;
+      }
+      if (!currentSession) {
+        router.replace('/(auth)/login');
+        return;
+      }
+    };
+    checkSession();
+  }, []);
 
   const handleRoleSelect = async (role: 'applicant' | 'employer') => {
     try {
-      setLoading(true);
+      setRoleSelectLoading(true);
       setError(null);
+
+      // Get current session
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !currentSession) {
+        throw new Error('No active session found. Please login again.');
+      }
 
       // Update user metadata with role
       const { error: updateError } = await supabase.auth.updateUser({
@@ -23,32 +46,54 @@ export default function RoleSelectScreen() {
 
       if (updateError) throw updateError;
 
-      // Create appropriate profile
-      const { error: profileError } = await supabase
+      // Check if profile already exists
+      const { data: existingProfile, error: checkError } = await supabase
         .from(role === 'employer' ? 'employer_profiles' : 'applicant_profiles')
-        .insert({
-          user_id: session?.user.id,
-          ...(role === 'employer' ? {
-            company_name: '',
-            description: '',
-            location: '',
-          } : {
-            full_name: '',
-            phone: '',
-            location: '',
-          })
-        });
+        .select('id')
+        .eq('user_id', currentSession.user.id)
+        .single();
 
-      if (profileError) throw profileError;
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw checkError;
+      }
+
+      // Only create profile if it doesn't exist
+      if (!existingProfile) {
+        const { error: profileError } = await supabase
+          .from(role === 'employer' ? 'employer_profiles' : 'applicant_profiles')
+          .insert({
+            user_id: currentSession.user.id,
+            ...(role === 'employer' ? {
+              company_name: '',
+              description: '',
+              location: '',
+            } : {
+              full_name: '',
+              phone: '',
+              location: '',
+            })
+          });
+
+        if (profileError) throw profileError;
+      }
 
       // Redirect to appropriate profile setup
       router.replace(role === 'employer' ? '/employer/profile' : '/profile');
     } catch (err) {
+      console.error('Role selection error:', err);
       setError(err instanceof Error ? err.message : 'Failed to set role');
     } finally {
-      setLoading(false);
+      setRoleSelectLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

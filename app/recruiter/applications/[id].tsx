@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Linking } from 'react-native';
 import { Text, Button, Card, Divider, Portal, Dialog } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
@@ -69,8 +69,29 @@ export default function ApplicationDetailsScreen() {
         throw error;
       }
 
-      console.log('Application details:', data);
-      setApplication(data);
+      // Transform the data to match the ApplicationDetails interface
+      const transformedData: ApplicationDetails = {
+        id: data.id,
+        status: data.status as ApplicationStatus,
+        created_at: data.created_at,
+        notes: data.notes,
+        job: {
+          id: data.job.id,
+          title: data.job.title,
+          company: data.job.company
+        },
+        applicant: {
+          id: data.applicant.id,
+          full_name: data.applicant.full_name,
+          phone: data.applicant.phone,
+          location: data.applicant.location,
+          about: data.applicant.about,
+          resume_url: data.applicant.resume_url
+        }
+      };
+
+      console.log('Application details:', transformedData);
+      setApplication(transformedData);
     } catch (error) {
       console.error('Error in fetchApplicationDetails:', error);
     } finally {
@@ -106,6 +127,22 @@ export default function ApplicationDetailsScreen() {
     setConfirmDialog({ visible: true, action: status });
   };
 
+  const handleResumeView = async () => {
+    try {
+      if (application?.applicant.resume_url) {
+        const supported = await Linking.canOpenURL(application.applicant.resume_url);
+        
+        if (supported) {
+          await Linking.openURL(application.applicant.resume_url);
+        } else {
+          console.error("Don't know how to open URI: " + application.applicant.resume_url);
+        }
+      }
+    } catch (error) {
+      console.error("Error opening resume URL:", error);
+    }
+  };
+
   if (loading) return <LoadingScreen />;
   if (!application) return null;
 
@@ -137,7 +174,7 @@ export default function ApplicationDetailsScreen() {
           {application.applicant.resume_url && (
             <Button
               mode="contained-tonal"
-              onPress={() => {/* Handle resume download */}}
+              onPress={handleResumeView}
               style={styles.button}
             >
               View Resume

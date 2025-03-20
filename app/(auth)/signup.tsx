@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { TextInput, Button, Text, HelperText, SegmentedButtons } from 'react-native-paper';
+import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 
@@ -9,7 +9,6 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('applicant');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,15 +33,10 @@ export default function SignUpScreen() {
         return;
       }
 
-      // Sign up the user with role in metadata
+      // Sign up the user
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            role: role // 'applicant' or 'employer'
-          },
-        }
       });
 
       if (signUpError) throw signUpError;
@@ -51,39 +45,8 @@ export default function SignUpScreen() {
         throw new Error('No user data returned');
       }
 
-      // Create appropriate profile
-      if (role === 'applicant') {
-        const { error: profileError } = await supabase
-          .from('applicant_profiles')
-          .insert({
-            user_id: data.user.id,
-            full_name: '',
-            phone: '',
-            location: '',
-            about: '',
-            resume_url: ''
-          });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          throw profileError;
-        }
-      } else {
-        // Handle employer profile creation
-        const { error: profileError } = await supabase
-          .from('employer_profiles')
-          .insert({
-            user_id: data.user.id,
-            company_name: '',
-            description: '',
-            location: ''
-          });
-
-        if (profileError) throw profileError;
-      }
-
-      // Redirect to email verification
-      router.replace('/(auth)/verify-email');
+      // Redirect to role selection
+      router.replace('/(auth)/role-select');
     } catch (err) {
       console.error('Signup error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred during signup');
@@ -97,16 +60,6 @@ export default function SignUpScreen() {
       <Text variant="headlineMedium" style={styles.title}>Create Account</Text>
 
       <View style={styles.form}>
-        <SegmentedButtons
-          value={role}
-          onValueChange={setRole}
-          buttons={[
-            { value: 'applicant', label: 'Job Seeker' },
-            { value: 'employer', label: 'Employer' },
-          ]}
-          style={styles.roleSelector}
-        />
-
         <TextInput
           label="Email"
           value={email}
@@ -184,8 +137,5 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 10,
-  },
-  roleSelector: {
-    marginBottom: 20,
   },
 }); 
