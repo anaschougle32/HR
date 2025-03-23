@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Stack, Slot, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { PaperProvider } from 'react-native-paper';
 import { NotificationsProvider } from '../contexts/NotificationsContext';
+import { View } from 'react-native';
 import theme from './theme';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -32,9 +33,6 @@ export default function RootLayout() {
           
           // Verdana is a system font, no need to load it
         });
-        
-        // Add artificial delay to ensure fonts are loaded
-        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (e) {
         console.warn('Error loading fonts:', e);
       } finally {
@@ -47,7 +45,11 @@ export default function RootLayout() {
 
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {
-      await SplashScreen.hideAsync();
+      try {
+        await SplashScreen.hideAsync();
+      } catch (e) {
+        console.warn('Error hiding splash screen:', e);
+      }
     }
   }, [appIsReady]);
 
@@ -56,13 +58,15 @@ export default function RootLayout() {
   }
 
   return (
-    <PaperProvider theme={theme}>
-      <AuthProvider>
-        <NotificationsProvider>
-          <RootLayoutNav />
-        </NotificationsProvider>
-      </AuthProvider>
-    </PaperProvider>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <PaperProvider theme={theme}>
+        <AuthProvider>
+          <NotificationsProvider>
+            <RootLayoutNav />
+          </NotificationsProvider>
+        </AuthProvider>
+      </PaperProvider>
+    </View>
   );
 }
 
