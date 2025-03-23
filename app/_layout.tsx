@@ -17,13 +17,17 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Load fonts
+        // Pre-load fonts
         await Font.loadAsync({
-          'Poppins': require('@/assets/fonts/Poppins-Regular.ttf'),
-          'Poppins-Medium': require('@/assets/fonts/Poppins-Medium.ttf'),
-          'Poppins-SemiBold': require('@/assets/fonts/Poppins-SemiBold.ttf'),
-          'Poppins-Bold': require('@/assets/fonts/Poppins-Bold.ttf'),
+          'Poppins': require('../assets/fonts/Poppins-Regular.ttf'),
+          'Poppins-Medium': require('../assets/fonts/Poppins-Medium.ttf'),
+          'Poppins-SemiBold': require('../assets/fonts/Poppins-SemiBold.ttf'),
+          'Poppins-Bold': require('../assets/fonts/Poppins-Bold.ttf')
         });
+
+        // Add artificial delay to ensure fonts are loaded
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
       } catch (e) {
         console.warn('Error loading fonts:', e);
       } finally {
@@ -36,6 +40,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (appIsReady) {
+      // Hide splash screen once everything is ready
       SplashScreen.hideAsync();
     }
   }, [appIsReady]);
@@ -94,5 +99,5 @@ function RootLayoutNav() {
     }
   }, [session, loading, segments, isInitialized]);
 
-  return <Slot />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 } 

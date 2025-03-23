@@ -1,5 +1,5 @@
 -- Create notifications table
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -13,15 +13,25 @@ CREATE TABLE notifications (
 );
 
 -- Create index for faster queries
-CREATE INDEX notifications_user_id_idx ON notifications(user_id);
-CREATE INDEX notifications_read_idx ON notifications(read);
+CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS notifications_read_idx ON notifications(read);
 
 -- Add RLS policies
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view their own notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can update their own notifications" ON notifications;
+
+-- Create policies
 CREATE POLICY "Users can view their own notifications"
   ON notifications FOR SELECT
   USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own notifications"
+  ON notifications FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 -- Function to create notifications
 CREATE OR REPLACE FUNCTION create_notification(
