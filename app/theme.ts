@@ -16,13 +16,13 @@ const theme = {
     titleMedium: { fontFamily: 'Poppins-Medium' },
     titleSmall: { fontFamily: 'Poppins' },
     
-    labelLarge: { fontFamily: 'Montserrat-SemiBold' },
-    labelMedium: { fontFamily: 'Montserrat-Medium' },
-    labelSmall: { fontFamily: 'Montserrat' },
+    labelLarge: { fontFamily: 'Poppins-SemiBold' },
+    labelMedium: { fontFamily: 'Poppins-Medium' },
+    labelSmall: { fontFamily: 'Poppins' },
     
-    bodyLarge: { fontFamily: 'Montserrat-Medium' },
-    bodyMedium: { fontFamily: 'Montserrat' },
-    bodySmall: { fontFamily: 'Montserrat' },
+    bodyLarge: { fontFamily: 'Poppins-Medium' },
+    bodyMedium: { fontFamily: 'Poppins' },
+    bodySmall: { fontFamily: 'Poppins' },
   },
   roundness: 8,
   colors: {

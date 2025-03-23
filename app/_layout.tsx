@@ -3,7 +3,7 @@ import { Stack, Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { PaperProvider } from 'react-native-paper';
 import { NotificationsProvider } from '../contexts/NotificationsContext';
-import { theme } from './theme';
+import theme from './theme';
 
 // Root layout must be exported as default
 export default function RootLayout() {
