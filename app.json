@@ -56,6 +56,38 @@
       {
         "asset": "./assets/fonts/Montserrat-Bold.ttf",
         "family": "Montserrat-Bold"
+      },
+      {
+        "asset": "./assets/fonts/Lexend-Regular.ttf",
+        "family": "Lexend"
+      },
+      {
+        "asset": "./assets/fonts/Lexend-Medium.ttf",
+        "family": "Lexend-Medium"
+      },
+      {
+        "asset": "./assets/fonts/Lexend-SemiBold.ttf",
+        "family": "Lexend-SemiBold"
+      },
+      {
+        "asset": "./assets/fonts/Lexend-Bold.ttf",
+        "family": "Lexend-Bold"
+      },
+      {
+        "asset": "./assets/fonts/Inter-Regular.ttf",
+        "family": "Inter"
+      },
+      {
+        "asset": "./assets/fonts/Inter-Medium.ttf",
+        "family": "Inter-Medium"
+      },
+      {
+        "asset": "./assets/fonts/Inter-SemiBold.ttf",
+        "family": "Inter-SemiBold"
+      },
+      {
+        "asset": "./assets/fonts/Inter-Bold.ttf",
+        "family": "Inter-Bold"
       }
     ]
   }

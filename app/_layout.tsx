@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Stack, Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { PaperProvider } from 'react-native-paper';
@@ -17,17 +17,36 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Pre-load fonts
         await Font.loadAsync({
+          // Poppins
           'Poppins': require('../assets/fonts/Poppins-Regular.ttf'),
           'Poppins-Medium': require('../assets/fonts/Poppins-Medium.ttf'),
           'Poppins-SemiBold': require('../assets/fonts/Poppins-SemiBold.ttf'),
-          'Poppins-Bold': require('../assets/fonts/Poppins-Bold.ttf')
+          'Poppins-Bold': require('../assets/fonts/Poppins-Bold.ttf'),
+          
+          // Montserrat
+          'Montserrat': require('../assets/fonts/Montserrat-Regular.ttf'),
+          'Montserrat-Medium': require('../assets/fonts/Montserrat-Medium.ttf'),
+          'Montserrat-SemiBold': require('../assets/fonts/Montserrat-SemiBold.ttf'),
+          'Montserrat-Bold': require('../assets/fonts/Montserrat-Bold.ttf'),
+          
+          // Lexend
+          'Lexend': require('../assets/fonts/Lexend-Regular.ttf'),
+          'Lexend-Medium': require('../assets/fonts/Lexend-Medium.ttf'),
+          'Lexend-SemiBold': require('../assets/fonts/Lexend-SemiBold.ttf'),
+          'Lexend-Bold': require('../assets/fonts/Lexend-Bold.ttf'),
+          
+          // Inter
+          'Inter': require('../assets/fonts/Inter-Regular.ttf'),
+          'Inter-Medium': require('../assets/fonts/Inter-Medium.ttf'),
+          'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
+          'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+          
+          // Verdana is a system font, no need to load it
         });
-
+        
         // Add artificial delay to ensure fonts are loaded
         await new Promise(resolve => setTimeout(resolve, 1000));
-
       } catch (e) {
         console.warn('Error loading fonts:', e);
       } finally {
@@ -38,10 +57,9 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  useEffect(() => {
+  const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {
-      // Hide splash screen once everything is ready
-      SplashScreen.hideAsync();
+      await SplashScreen.hideAsync();
     }
   }, [appIsReady]);
 

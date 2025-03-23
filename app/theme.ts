@@ -4,25 +4,30 @@ const theme: MD3Theme = {
   ...MD3LightTheme,
   fonts: {
     ...MD3LightTheme.fonts,
-    displayLarge: { ...MD3LightTheme.fonts.displayLarge, fontFamily: 'Poppins-Bold' },
-    displayMedium: { ...MD3LightTheme.fonts.displayMedium, fontFamily: 'Poppins-SemiBold' },
-    displaySmall: { ...MD3LightTheme.fonts.displaySmall, fontFamily: 'Poppins-Medium' },
+    // Large Display Text - Using Montserrat for headlines and large text
+    displayLarge: { ...MD3LightTheme.fonts.displayLarge, fontFamily: 'Montserrat-Bold' },
+    displayMedium: { ...MD3LightTheme.fonts.displayMedium, fontFamily: 'Montserrat-SemiBold' },
+    displaySmall: { ...MD3LightTheme.fonts.displaySmall, fontFamily: 'Montserrat-Medium' },
     
-    headlineLarge: { ...MD3LightTheme.fonts.headlineLarge, fontFamily: 'Poppins-Bold' },
-    headlineMedium: { ...MD3LightTheme.fonts.headlineMedium, fontFamily: 'Poppins-SemiBold' },
-    headlineSmall: { ...MD3LightTheme.fonts.headlineSmall, fontFamily: 'Poppins-Medium' },
+    // Headlines - Using Lexend for better readability
+    headlineLarge: { ...MD3LightTheme.fonts.headlineLarge, fontFamily: 'Lexend-Bold' },
+    headlineMedium: { ...MD3LightTheme.fonts.headlineMedium, fontFamily: 'Lexend-SemiBold' },
+    headlineSmall: { ...MD3LightTheme.fonts.headlineSmall, fontFamily: 'Lexend-Medium' },
     
+    // Titles - Using Poppins for modern look
     titleLarge: { ...MD3LightTheme.fonts.titleLarge, fontFamily: 'Poppins-SemiBold' },
     titleMedium: { ...MD3LightTheme.fonts.titleMedium, fontFamily: 'Poppins-Medium' },
     titleSmall: { ...MD3LightTheme.fonts.titleSmall, fontFamily: 'Poppins' },
     
-    labelLarge: { ...MD3LightTheme.fonts.labelLarge, fontFamily: 'Poppins-SemiBold' },
-    labelMedium: { ...MD3LightTheme.fonts.labelMedium, fontFamily: 'Poppins-Medium' },
-    labelSmall: { ...MD3LightTheme.fonts.labelSmall, fontFamily: 'Poppins' },
+    // Labels - Using Verdana for clarity
+    labelLarge: { ...MD3LightTheme.fonts.labelLarge, fontFamily: 'Verdana-Bold' },
+    labelMedium: { ...MD3LightTheme.fonts.labelMedium, fontFamily: 'Verdana' },
+    labelSmall: { ...MD3LightTheme.fonts.labelSmall, fontFamily: 'Verdana' },
     
-    bodyLarge: { ...MD3LightTheme.fonts.bodyLarge, fontFamily: 'Poppins-Medium' },
-    bodyMedium: { ...MD3LightTheme.fonts.bodyMedium, fontFamily: 'Poppins' },
-    bodySmall: { ...MD3LightTheme.fonts.bodySmall, fontFamily: 'Poppins' },
+    // Body Text - Using Inter for readability
+    bodyLarge: { ...MD3LightTheme.fonts.bodyLarge, fontFamily: 'Inter-Medium' },
+    bodyMedium: { ...MD3LightTheme.fonts.bodyMedium, fontFamily: 'Inter' },
+    bodySmall: { ...MD3LightTheme.fonts.bodySmall, fontFamily: 'Inter' },
   },
   roundness: 8,
   colors: {
