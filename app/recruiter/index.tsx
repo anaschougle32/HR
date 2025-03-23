@@ -51,28 +51,17 @@ export default function RecruiterDashboardScreen() {
     try {
       setLoading(true);
 
-      // Get recruiter profile
-      const { data: recruiter, error: recruiterError } = await supabase
-        .from('recruiter_profiles')
-        .select('id, employer_id')
-        .eq('user_id', session?.user?.id)
-        .single();
-
-      if (recruiterError) throw recruiterError;
-
-      // Get job stats
+      // Get all jobs
       const { data: jobs, error: jobsError } = await supabase
         .from('jobs')
-        .select('id, status')
-        .eq('employer_id', recruiter.employer_id);
+        .select('id, status');
 
       if (jobsError) throw jobsError;
 
       // Get total applications count
       const { count: applicationsCount, error: countError } = await supabase
         .from('applications')
-        .select('id', { count: 'exact' })
-        .eq('status', 'pending');
+        .select('id', { count: 'exact' });
 
       if (countError) throw countError;
 
@@ -99,7 +88,6 @@ export default function RecruiterDashboardScreen() {
             title
           )
         `)
-        .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(5);
 

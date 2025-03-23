@@ -78,16 +78,7 @@ export default function ApplicationsScreen() {
     try {
       setLoading(true);
 
-      // Get recruiter profile to get employer_id
-      const { data: recruiter, error: recruiterError } = await supabase
-        .from('recruiter_profiles')
-        .select('employer_id')
-        .eq('user_id', session?.user?.id)
-        .single();
-
-      if (recruiterError) throw recruiterError;
-
-      // Get all applications for jobs posted by this employer
+      // Get all applications without employer restriction
       const { data, error } = await supabase
         .from('applications')
         .select(`
@@ -105,7 +96,6 @@ export default function ApplicationsScreen() {
             title
           )
         `)
-        .eq('jobs.employer_id', recruiter.employer_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

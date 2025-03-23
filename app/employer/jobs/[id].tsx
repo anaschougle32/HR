@@ -117,7 +117,7 @@ export default function JobDetailsScreen() {
   };
 
   useEffect(() => {
-    fetchJobDetails();
+      fetchJobDetails();
   }, [id, session]);
 
   const onRefresh = async () => {
@@ -200,17 +200,17 @@ export default function JobDetailsScreen() {
         <Text variant="titleMedium" style={styles.sectionTitle}>Application Statistics</Text>
         <View style={styles.statsGrid}>
           <Card style={styles.statCard}>
-            <Card.Content>
+          <Card.Content>
               <Text variant="headlineMedium" style={styles.statNumber}>{stats.total}</Text>
               <Text variant="bodyMedium">Total Applications</Text>
-            </Card.Content>
-          </Card>
+          </Card.Content>
+        </Card>
           <Card style={styles.statCard}>
-            <Card.Content>
+          <Card.Content>
               <Text variant="headlineMedium" style={styles.statNumber}>{stats.shortlisted}</Text>
               <Text variant="bodyMedium">Shortlisted</Text>
-            </Card.Content>
-          </Card>
+          </Card.Content>
+        </Card>
           <Card style={styles.statCard}>
             <Card.Content>
               <Text variant="headlineMedium" style={styles.statNumber}>{stats.hired}</Text>
@@ -221,7 +221,7 @@ export default function JobDetailsScreen() {
       </View>
 
       <Card style={styles.detailsCard}>
-        <Card.Content>
+          <Card.Content>
           <View style={styles.tagsContainer}>
             <Chip style={styles.tag} icon="briefcase-outline">{job.employment_type}</Chip>
             <Chip style={styles.tag} icon="folder-outline">{job.category}</Chip>
@@ -240,8 +240,8 @@ export default function JobDetailsScreen() {
 
           <Text variant="titleMedium" style={styles.sectionTitle}>Requirements</Text>
           <Text style={styles.description}>{job.requirements}</Text>
-        </Card.Content>
-      </Card>
+          </Card.Content>
+        </Card>
 
       <View style={styles.actions}>
         <Button 

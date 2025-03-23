@@ -1,25 +1,10 @@
-// First import the polyfill
-import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-// Explicitly check and use environment variables
-if (!process.env.EXPO_PUBLIC_SUPABASE_URL) {
-  throw new Error('Missing EXPO_PUBLIC_SUPABASE_URL');
-}
-if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-  throw new Error('Missing EXPO_PUBLIC_SUPABASE_ANON_KEY');
-}
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'your_supabase_url';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your_supabase_anon_key';
 
-export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL,
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-  {
-    auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false
   }
-); 
+}); 

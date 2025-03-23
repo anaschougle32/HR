@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "clear": "expo start -c"
+    "add-recruiter": "ts-node scripts/addRecruiter.ts"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.21.0",
@@ -34,9 +34,11 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@types/node": "^20.11.30",
     "@types/react": "~18.3.12",
     "react-native-dotenv": "^3.4.11",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
   },
   "private": true
 }

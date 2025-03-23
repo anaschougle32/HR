@@ -1,3 +1,4 @@
+import React from 'react';
 import { StyleSheet, View, Image, TouchableOpacity } from 'react-native';
 import { Button, Text, Card, HelperText, ActivityIndicator, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
@@ -11,11 +12,12 @@ export default function RoleSelectScreen() {
   const theme = useTheme();
   const { session, loading: authLoading } = useAuth();
   const [roleSelectLoading, setRoleSelectLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'applicant' | 'employer' | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'applicant' | 'employer' | 'recruiter' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
   const [jobseekerError, setJobseekerError] = useState(false);
   const [employerError, setEmployerError] = useState(false);
+  const [recruiterError, setRecruiterError] = useState(false);
 
   // Check session and refresh if needed
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function RoleSelectScreen() {
     checkSession();
   }, []);
 
-  const handleRoleSelect = async (role: 'applicant' | 'employer') => {
+  const handleRoleSelect = async (role: 'applicant' | 'employer' | 'recruiter') => {
     try {
       setSelectedRole(role);
       setRoleSelectLoading(true);
@@ -54,38 +56,90 @@ export default function RoleSelectScreen() {
       if (updateError) throw updateError;
 
       // Check if profile already exists
+      let tableName = '';
+      let defaultData = {};
+
+      switch (role) {
+        case 'applicant':
+          tableName = 'applicant_profiles';
+          defaultData = {
+            full_name: '',
+            phone: '',
+            location: '',
+          };
+          break;
+        case 'employer':
+          tableName = 'employer_profiles';
+          defaultData = {
+            company_name: '',
+            description: '',
+            location: '',
+          };
+          break;
+        case 'recruiter':
+          tableName = 'recruiter_profiles';
+          // First, get the first employer from employer_profiles
+          const { data: firstEmployer, error: employerError } = await supabase
+            .from('employer_profiles')
+            .select('id')
+            .limit(1)
+            .single();
+          
+          if (employerError && employerError.code !== 'PGRST116') {
+            throw employerError;
+          }
+
+          defaultData = {
+            full_name: '',
+            title: '',
+            email: currentSession.user.email,
+            employer_id: firstEmployer?.id || null,
+            permissions: {
+              can_post_jobs: true,
+              can_review_applications: true,
+              can_interview: true
+            }
+          };
+          break;
+      }
+
       const { data: existingProfile, error: checkError } = await supabase
-        .from(role === 'employer' ? 'employer_profiles' : 'applicant_profiles')
+        .from(tableName)
         .select('id')
         .eq('user_id', currentSession.user.id)
         .single();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
       }
 
       // Only create profile if it doesn't exist
       if (!existingProfile) {
         const { error: profileError } = await supabase
-          .from(role === 'employer' ? 'employer_profiles' : 'applicant_profiles')
+          .from(tableName)
           .insert({
             user_id: currentSession.user.id,
-            ...(role === 'employer' ? {
-              company_name: '',
-              description: '',
-              location: '',
-            } : {
-              full_name: '',
-              phone: '',
-              location: '',
-            })
+            ...defaultData
           });
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw profileError;
+        }
       }
 
       // Redirect to appropriate profile setup
-      router.replace(role === 'employer' ? '/employer/profile' : '/profile');
+      switch (role) {
+        case 'recruiter':
+          router.replace('/recruiter/');
+          break;
+        case 'employer':
+          router.replace('/employer/profile');
+          break;
+        case 'applicant':
+          router.replace('/profile');
+          break;
+      }
     } catch (err) {
       console.error('Role selection error:', err);
       setError(err instanceof Error ? err.message : 'Failed to set role');
@@ -203,6 +257,42 @@ export default function RoleSelectScreen() {
             </Card.Content>
           </Card>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          activeOpacity={0.9} 
+          onPress={() => !roleSelectLoading && handleRoleSelect('recruiter')}
+          disabled={roleSelectLoading}
+        >
+          <Card 
+            style={[
+              styles.card, 
+              selectedRole === 'recruiter' && styles.selectedCard
+            ]}
+            mode="outlined"
+          >
+            <Card.Content style={styles.cardContent}>
+              <View style={styles.roleIconContainer}>
+                {recruiterError ? (
+                  <Text style={styles.placeholderIcon}>RC</Text>
+                ) : (
+                  <Image 
+                    source={require('../../assets/recruiter.png')}
+                    style={styles.roleIcon}
+                    resizeMode="contain"
+                    onError={() => setRecruiterError(true)}
+                  />
+                )}
+              </View>
+              <Text variant="titleLarge" style={styles.roleTitle}>Recruiter</Text>
+              <Text variant="bodyMedium" style={styles.roleDescription}>
+                Manage job postings and handle recruitment process
+              </Text>
+              {selectedRole === 'recruiter' && roleSelectLoading && (
+                <ActivityIndicator size="small" color="#4a5eff" style={styles.roleLoader} />
+              )}
+            </Card.Content>
+          </Card>
+        </TouchableOpacity>
       </View>
 
       {error && <HelperText type="error" style={styles.errorText}>{error}</HelperText>}
@@ -248,7 +338,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   card: {
-    marginBottom: 0,
+    marginBottom: 16,
     borderRadius: 16,
     borderColor: '#E0E0E0',
     borderWidth: 1,

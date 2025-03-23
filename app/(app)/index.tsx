@@ -36,6 +36,12 @@ interface JobStats {
   total: number;
   fullTime: number;
   partTime: number;
+  applications: {
+    total: number;
+    pending: number;
+    shortlisted: number;
+    rejected: number;
+  };
 }
 
 export default function HomeScreen() {
@@ -50,7 +56,13 @@ export default function HomeScreen() {
   const [jobStats, setJobStats] = useState<JobStats>({
     total: 0,
     fullTime: 0,
-    partTime: 0
+    partTime: 0,
+    applications: {
+      total: 0,
+      pending: 0,
+      shortlisted: 0,
+      rejected: 0
+    }
   });
   
   useEffect(() => {
@@ -80,6 +92,15 @@ export default function HomeScreen() {
 
   const fetchJobStats = async () => {
     try {
+      // Get applicant profile ID
+      const { data: profile } = await supabase
+        .from('applicant_profiles')
+        .select('id')
+        .eq('user_id', session?.user.id)
+        .single();
+
+      if (!profile) return;
+
       // Get total active jobs
       const { data: totalJobs, error: totalError } = await supabase
         .from('jobs')
@@ -100,11 +121,25 @@ export default function HomeScreen() {
         .eq('status', 'active')
         .eq('employment_type', 'part-time');
 
-      if (!totalError && !fullTimeError && !partTimeError) {
+      // Get application statistics
+      const { data: applications, error: applicationsError } = await supabase
+        .from('applications')
+        .select('status')
+        .eq('applicant_id', profile.id);
+
+      if (!totalError && !fullTimeError && !partTimeError && !applicationsError) {
+        const applicationStats = {
+          total: applications?.length || 0,
+          pending: applications?.filter(a => a.status === 'pending').length || 0,
+          shortlisted: applications?.filter(a => a.status === 'shortlisted').length || 0,
+          rejected: applications?.filter(a => a.status === 'rejected').length || 0
+        };
+
         setJobStats({
           total: totalJobs?.length || 0,
           fullTime: fullTimeJobs?.length || 0,
-          partTime: partTimeJobs?.length || 0
+          partTime: partTimeJobs?.length || 0,
+          applications: applicationStats
         });
       }
     } catch (error) {
@@ -248,12 +283,20 @@ export default function HomeScreen() {
           <Text variant="titleMedium" style={styles.welcomeText}>Hello {userName}</Text>
           <Text variant="bodySmall" style={styles.subtitle}>Start Your New Journey</Text>
         </View>
-        <IconButton
-          icon="logout"
-          size={24}
-          onPress={handleSignOut}
-          style={styles.signOutButton}
-        />
+        <View style={styles.headerButtons}>
+          <IconButton
+            icon="briefcase"
+            size={24}
+            onPress={() => router.push('/(app)/applications')}
+            style={styles.applicationButton}
+          />
+          <IconButton
+            icon="logout"
+            size={24}
+            onPress={handleSignOut}
+            style={styles.signOutButton}
+          />
+        </View>
       </View>
 
       <View style={styles.searchSection}>
@@ -273,18 +316,18 @@ export default function HomeScreen() {
 
       <View style={styles.statsSection}>
         <View style={[styles.statCard, { backgroundColor: '#4a5eff' }]}>
-          <Text style={styles.statNumber}>{jobStats.total}</Text>
-          <Text style={styles.statLabel}>Available Jobs</Text>
+          <Text style={styles.statNumber}>{jobStats.applications.total}</Text>
+          <Text style={styles.statLabel}>Applications</Text>
         </View>
         
         <View style={[styles.statCard, { backgroundColor: '#ff9d4a' }]}>
-          <Text style={styles.statNumber}>{jobStats.fullTime}</Text>
-          <Text style={styles.statLabel}>Full Time</Text>
+          <Text style={styles.statNumber}>{jobStats.applications.pending}</Text>
+          <Text style={styles.statLabel}>Pending</Text>
         </View>
         
         <View style={[styles.statCard, { backgroundColor: '#4bcffa' }]}>
-          <Text style={styles.statNumber}>{jobStats.partTime}</Text>
-          <Text style={styles.statLabel}>Part Time</Text>
+          <Text style={styles.statNumber}>{jobStats.applications.shortlisted}</Text>
+          <Text style={styles.statLabel}>Shortlisted</Text>
         </View>
       </View>
 
@@ -517,5 +560,12 @@ const styles = StyleSheet.create({
   },
   showAllButton: {
     color: '#4a5eff',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  applicationButton: {
+    marginRight: 8,
   },
 }); 

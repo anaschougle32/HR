@@ -51,14 +51,16 @@ export default function ApplicationsScreen() {
 
       if (error) throw error;
       
-      // Transform data to handle potential arrays
-      const transformedData = (data || []).map(item => {
-        const jobData = Array.isArray(item.job) ? item.job[0] : item.job;
-        return {
-          ...item,
-          job: jobData
-        };
-      });
+      // Transform data to handle potential arrays and null values
+      const transformedData = (data || [])
+        .filter(item => item.job) // Filter out applications with no job data
+        .map(item => {
+          const jobData = Array.isArray(item.job) ? item.job[0] : item.job;
+          return {
+            ...item,
+            job: jobData
+          };
+        });
       
       setApplications(transformedData);
     } catch (error) {

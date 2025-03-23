@@ -34,20 +34,10 @@ export default function JobReviewScreen() {
     try {
       setLoading(true);
 
-      // Get recruiter profile to get employer_id
-      const { data: recruiter, error: recruiterError } = await supabase
-        .from('recruiter_profiles')
-        .select('employer_id')
-        .eq('user_id', session?.user?.id)
-        .single();
-
-      if (recruiterError) throw recruiterError;
-
-      // Get jobs for review
+      // Get all jobs for review
       const { data: jobsData, error: jobsError } = await supabase
         .from('jobs')
         .select('*')
-        .eq('employer_id', recruiter.employer_id)
         .order('created_at', { ascending: false });
 
       if (jobsError) throw jobsError;
