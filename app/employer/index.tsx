@@ -1,191 +1,390 @@
 import { useState, useEffect } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, Button, Card, FAB } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { 
+  Text, 
+  Card, 
+  Button, 
+  Searchbar, 
+  Chip, 
+  IconButton, 
+  ActivityIndicator, 
+  Portal, 
+  Dialog,
+  Surface
+} from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import NotificationButton from '../../components/NotificationButton';
 
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  created_at: string;
-  applications_count: number;
+interface JobStats {
+  total_jobs: number;
+  total_applications: number;
+  total_shortlisted: number;
+  total_hired: number;
+  pending_review_jobs: number;
 }
 
-export default function EmployerDashboard() {
+interface RecentJob {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  applications_count: number;
+  shortlisted_count: number;
+}
+
+export default function EmployerDashboardScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalJobs: 0,
-    activeApplications: 0,
-    shortlistedCandidates: 0,
-    scheduledInterviews: 0
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<JobStats>({
+    total_jobs: 0,
+    total_applications: 0,
+    total_shortlisted: 0,
+    total_hired: 0,
+    pending_review_jobs: 0
   });
+  const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
-  useEffect(() => {
-    fetchJobs();
-    fetchDashboardStats();
-  }, []);
-
-  const fetchJobs = async () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      if (!session?.user?.id) {
-        console.error('No user session found');
-        return;
-      }
 
-      const { data: profile, error: profileError } = await supabase
+      // Get employer profile
+      const { data: employer, error: employerError } = await supabase
         .from('employer_profiles')
         .select('id')
-        .eq('user_id', session.user.id)
+        .eq('user_id', session?.user?.id)
         .single();
 
-      if (profileError) {
-        console.error('Error fetching profile:', profileError);
-        return;
-      }
+      if (employerError) throw employerError;
 
-      if (!profile) {
-        console.error('No employer profile found');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('jobs')
+      // Get stats from the view
+      const { data: statsData, error: statsError } = await supabase
+        .from('employer_job_stats')
         .select('*')
-        .eq('employer_id', profile.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching jobs:', error);
-        return;
-      }
-
-      setJobs(data || []);
-    } catch (error) {
-      console.error('Error in fetchJobs:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchDashboardStats = async () => {
-    try {
-      const { data: profile } = await supabase
-        .from('employer_profiles')
-        .select('id')
-        .eq('user_id', session?.user.id)
+        .eq('employer_id', employer.id)
         .single();
 
-      if (!profile) {
-        console.error('No employer profile found');
-        return;
-      }
+      if (statsError) throw statsError;
 
-      // Fetch jobs count
-      const { data: jobs } = await supabase
+      // Get recent jobs with application counts
+      const { data: jobs, error: jobsError } = await supabase
         .from('jobs')
-        .select('id', { count: 'exact' })
-        .eq('employer_id', profile.id);
+        .select(`
+          id,
+          title,
+          status,
+          created_at,
+          applications:applications(count),
+          shortlisted:applications(count)
+        `)
+        .eq('employer_id', employer.id)
+        .eq('applications.status', 'shortlisted')
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      // Fetch applications stats
-      const { data: applications } = await supabase
-        .from('applications')
-        .select('status, job:jobs!inner(employer_id)')
-        .eq('job.employer_id', profile.id);
+      if (jobsError) throw jobsError;
 
-      setStats({
-        totalJobs: jobs?.length || 0,
-        activeApplications: applications?.filter(app => app.status === 'pending').length || 0,
-        shortlistedCandidates: applications?.filter(app => app.status === 'shortlisted').length || 0,
-        scheduledInterviews: 0 // You can implement this later
-      });
+      const transformedJobs: RecentJob[] = jobs.map(job => ({
+        id: job.id,
+        title: job.title,
+        status: job.status,
+        created_at: job.created_at,
+        applications_count: job.applications?.length || 0,
+        shortlisted_count: job.shortlisted?.length || 0
+      }));
+
+      setStats(statsData);
+      setRecentJobs(transformedJobs);
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
+      console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchDashboardData();
+    }
+  }, [session]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4a5eff" />
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <ScrollView>
-        <View style={styles.header}>
-          <Text variant="headlineMedium">Posted Jobs</Text>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      <Surface style={styles.header} elevation={2}>
+        <View style={styles.headerContent}>
+          <Text variant="headlineMedium" style={styles.title}>Dashboard</Text>
+          <View style={styles.headerRight}>
+            <NotificationButton />
+            <IconButton
+              icon="logout"
+              size={24}
+              onPress={() => setConfirmSignOut(true)}
+            />
+          </View>
+        </View>
+      </Surface>
+
+      <View style={styles.statsGrid}>
+        <Card style={[styles.statsCard, { backgroundColor: '#4a5eff' }]}>
+          <Card.Content>
+            <MaterialCommunityIcons name="briefcase-outline" size={24} color="#fff" />
+            <Text variant="headlineMedium" style={styles.statNumber}>{stats.total_jobs}</Text>
+            <Text style={styles.statLabel}>Jobs Posted</Text>
+          </Card.Content>
+        </Card>
+
+        <Card style={[styles.statsCard, { backgroundColor: '#00c853' }]}>
+          <Card.Content>
+            <MaterialCommunityIcons name="file-document-outline" size={24} color="#fff" />
+            <Text variant="headlineMedium" style={styles.statNumber}>{stats.total_applications}</Text>
+            <Text style={styles.statLabel}>Total Applications</Text>
+          </Card.Content>
+        </Card>
+
+        <Card 
+          style={[styles.statsCard, { backgroundColor: '#ff9d4a' }]}
+          onPress={() => router.push('/employer/applications/shortlisted')}
+        >
+          <Card.Content>
+            <MaterialCommunityIcons name="account-check-outline" size={24} color="#fff" />
+            <Text variant="headlineMedium" style={styles.statNumber}>{stats.total_shortlisted}</Text>
+            <Text style={styles.statLabel}>Shortlisted</Text>
+          </Card.Content>
+        </Card>
+
+        <Card 
+          style={[styles.statsCard, { backgroundColor: '#757575' }]}
+          onPress={() => router.push('/employer/jobs/pending')}
+        >
+          <Card.Content>
+            <MaterialCommunityIcons name="clock-outline" size={24} color="#fff" />
+            <Text variant="headlineMedium" style={styles.statNumber}>{stats.pending_review_jobs}</Text>
+            <Text style={styles.statLabel}>Pending Review</Text>
+          </Card.Content>
+        </Card>
+      </View>
+
+      <View style={styles.actionButtons}>
+        <Button
+          mode="contained"
+          onPress={() => router.push('/employer/jobs/post')}
+          style={[styles.actionButton, { backgroundColor: '#4a5eff' }]}
+          icon="plus"
+        >
+          Post New Job
+        </Button>
+        <Button
+          mode="contained"
+          onPress={() => router.push('/employer/applications/shortlisted')}
+          style={[styles.actionButton, { backgroundColor: '#00c853' }]}
+          icon="account-check"
+        >
+          Review Shortlisted
+        </Button>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text variant="titleMedium">Recent Job Posts</Text>
+          <Button 
+            mode="text" 
+            onPress={() => router.push('/employer/jobs')}
+            textColor="#4a5eff"
+          >
+            View All
+          </Button>
         </View>
 
-        <View style={styles.content}>
-          {jobs.map((job) => (
-            <Card 
-              key={job.id} 
-              style={styles.card}
-              onPress={() => router.push(`/employer/jobs/${job.id}`)}
-            >
-              <Card.Content>
-                <Text variant="titleLarge">{job.title}</Text>
-                <Text variant="titleMedium">{job.company}</Text>
-                <Text variant="bodyMedium">{job.location}</Text>
-                
-                <View style={styles.cardFooter}>
-                  <Text variant="bodySmall" style={styles.date}>
+        {recentJobs.map(job => (
+          <Card 
+            key={job.id}
+            style={styles.jobCard}
+            onPress={() => router.push(`/employer/jobs/${job.id}`)}
+          >
+            <Card.Content>
+              <View style={styles.jobHeader}>
+                <View style={styles.jobInfo}>
+                  <Text variant="titleMedium">{job.title}</Text>
+                  <Text variant="bodySmall" style={styles.dateText}>
                     Posted on {new Date(job.created_at).toLocaleDateString()}
                   </Text>
-                  <Text variant="bodySmall">
-                    {job.applications_count} Applications
-                  </Text>
                 </View>
-              </Card.Content>
-            </Card>
-          ))}
-        </View>
-      </ScrollView>
+                <Chip 
+                  style={[styles.statusChip, { 
+                    backgroundColor: job.status === 'active' ? '#00c853' : 
+                                   job.status === 'pending_review' ? '#ff9d4a' : '#757575'
+                  }]}
+                >
+                  {job.status}
+                </Chip>
+              </View>
+              <View style={styles.jobStats}>
+                <Chip icon="file-document" style={styles.statChip}>
+                  {job.applications_count} Applications
+                </Chip>
+                <Chip icon="account-check" style={styles.statChip}>
+                  {job.shortlisted_count} Shortlisted
+                </Chip>
+              </View>
+            </Card.Content>
+          </Card>
+        ))}
+      </View>
 
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => router.push('/employer/jobs/new')}
-        label="Post Job"
-      />
-    </View>
+      <Portal>
+        <Dialog
+          visible={confirmSignOut}
+          onDismiss={() => setConfirmSignOut(false)}
+        >
+          <Dialog.Title>Sign Out</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">Are you sure you want to sign out?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmSignOut(false)}>Cancel</Button>
+            <Button onPress={handleSignOut}>Sign Out</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#666',
   },
   header: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  content: {
-    padding: 20,
-  },
-  card: {
-    marginBottom: 15,
-  },
-  cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 15,
+    padding: 16,
   },
-  date: {
-    opacity: 0.7,
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  subtitle: {
+    color: '#666',
+  },
+  statsGrid: {
+    padding: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statsCard: {
+    width: '48%',
+    borderRadius: 12,
+    elevation: 2,
+    marginBottom: 8,
+  },
+  statNumber: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginVertical: 8,
+  },
+  statLabel: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  actionButtons: {
+    padding: 16,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    borderRadius: 8,
+  },
+  section: {
+    padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  jobCard: {
+    marginBottom: 8,
+    borderRadius: 12,
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  jobInfo: {
+    flex: 1,
+  },
+  dateText: {
+    color: '#666',
+    marginTop: 4,
+  },
+  statusChip: {
+    marginLeft: 8,
+  },
+  jobStats: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statChip: {
+    backgroundColor: '#f0f2ff',
   },
 }); 

@@ -1,12 +1,11 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
+import { ActivityIndicator, Text } from 'react-native-paper';
 
-export default function LoadingScreen() {
-  const theme = useTheme();
-  
+export default function LoadingScreen({ message = 'Loading...' }: { message?: string }) {
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <ActivityIndicator size="large" color="#4a5eff" />
+      <Text style={styles.text}>{message}</Text>
     </View>
   );
 }
@@ -16,5 +15,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  text: {
+    marginTop: 12,
+    color: '#757575',
   },
 }); 

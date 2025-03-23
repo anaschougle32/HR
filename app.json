@@ -23,6 +23,40 @@
       "infoPlist": {
         "NSDocumentPickerUsageDescription": "This app needs access to documents for resume uploads."
       }
-    }
+    },
+    "fonts": [
+      {
+        "asset": "./assets/fonts/Poppins-Regular.ttf",
+        "family": "Poppins"
+      },
+      {
+        "asset": "./assets/fonts/Poppins-Medium.ttf",
+        "family": "Poppins-Medium"
+      },
+      {
+        "asset": "./assets/fonts/Poppins-SemiBold.ttf",
+        "family": "Poppins-SemiBold"
+      },
+      {
+        "asset": "./assets/fonts/Poppins-Bold.ttf",
+        "family": "Poppins-Bold"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Regular.ttf",
+        "family": "Montserrat"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Medium.ttf",
+        "family": "Montserrat-Medium"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-SemiBold.ttf",
+        "family": "Montserrat-SemiBold"
+      },
+      {
+        "asset": "./assets/fonts/Montserrat-Bold.ttf",
+        "family": "Montserrat-Bold"
+      }
+    ]
   }
 }

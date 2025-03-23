@@ -1,483 +1,448 @@
 import { useState, useEffect } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, Card, Chip, Button, Searchbar, SegmentedButtons, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { Text, Card, Button, Chip, Searchbar, SegmentedButtons, ActivityIndicator, Avatar, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
-interface Job {
+interface ApplicationStats {
+  total: number;
+  pending: number;
+  shortlisted: number;
+  rejected: number;
+  hired: number;
+}
+
+interface RawDatabaseApplication {
   id: string;
-  title: string;
-  employer: {
-    company_name: string;
+  created_at: string;
+  status: string;
+  jobs: {
+    title: string;
+    company: string;
+    category: string;
+  };
+  applicant_profiles: {
+    id: string;
+    full_name: string;
+    title: string | null;
   };
 }
-
-interface Applicant {
-  id: string;
-  full_name: string;
-  title: string | null;
-  resume_url: string | null;
-  location: string | null;
-  phone: string | null;
-}
-
-type ApplicationStatus = 'pending' | 'reviewed' | 'shortlisted' | 'rejected';
 
 interface Application {
   id: string;
-  status: ApplicationStatus;
   created_at: string;
-  job: Job;
-  applicant: Applicant;
-}
-
-interface ApiResponse {
-  id: string;
   status: string;
-  created_at: string;
-  applicant_id: string;
   job: {
-    id: string;
     title: string;
     company: string;
+    category: string;
   };
   applicant: {
     id: string;
-    user_id: string;
     full_name: string;
-    title: string;
-    resume_url: string | null;
-    location: string;
+    title: string | null;
   };
 }
+
+const APPLICATION_STATUSES = ['pending', 'shortlisted', 'rejected', 'hired'];
 
 export default function ApplicationsScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [filteredApplications, setFilteredApplications] = useState<Application[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [subscription, setSubscription] = useState<RealtimeChannel | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [stats, setStats] = useState<ApplicationStats>({
+    total: 0,
+    pending: 0,
+    shortlisted: 0,
+    rejected: 0,
+    hired: 0
+  });
 
-  const createRecruiterProfile = async () => {
-    try {
-      // First get the employer profile
-      const { data: employerProfile } = await supabase
-        .from('employer_profiles')
-        .select('id')
-        .single();
-
-      if (!employerProfile) {
-        throw new Error('No employer profile found');
-      }
-
-      const { data, error } = await supabase
-        .from('recruiter_profiles')
-        .insert({
-          user_id: session?.user.id,
-          email: session?.user.email,
-          full_name: 'Anas Chougle',
-          title: 'Technical Recruiter',
-          employer_id: employerProfile.id, // Link to employer
-          permissions: {
-            can_interview: true,
-            can_post_jobs: true,
-            can_review_applications: true
-          }
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error creating recruiter profile:', error);
-      throw error;
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchApplications();
     }
-  };
+  }, [session]);
+
+  useEffect(() => {
+    filterApplications();
+  }, [searchQuery, selectedStatus, applications]);
 
   const fetchApplications = async () => {
     try {
-      console.log('Fetching applications...');
       setLoading(true);
 
-      // Get recruiter profile with employer_id
-      const { data: recruiterProfile, error: profileError } = await supabase
+      // Get recruiter profile to get employer_id
+      const { data: recruiter, error: recruiterError } = await supabase
         .from('recruiter_profiles')
         .select('employer_id')
-        .eq('user_id', session?.user.id)
+        .eq('user_id', session?.user?.id)
         .single();
 
-      if (profileError) {
-        console.error('Error fetching recruiter profile:', profileError);
-        return;
-      }
+      if (recruiterError) throw recruiterError;
 
-      // Get jobs for this employer
-      const { data: jobs, error: jobsError } = await supabase
-        .from('jobs')
-        .select('id')
-        .eq('employer_id', recruiterProfile.employer_id);
-
-      if (jobsError) {
-        console.error('Error fetching jobs:', jobsError);
-        return;
-      }
-
-      const jobIds = jobs.map(job => job.id);
-      
-      if (jobIds.length === 0) {
-        setApplications([]);
-        return;
-      }
-
-      // Fetch applications in two steps to avoid recursion
-      // First, get basic application data
-      const { data: basicApps, error: appsError } = await supabase
+      // Get all applications for jobs posted by this employer
+      const { data, error } = await supabase
         .from('applications')
-        .select('id, status, created_at, job_id, applicant_profile_id')
-        .in('job_id', jobIds)
+        .select(`
+          id,
+          created_at,
+          status,
+          jobs (
+            title,
+            company,
+            category
+          ),
+          applicant_profiles (
+            id,
+            full_name,
+            title
+          )
+        `)
+        .eq('jobs.employer_id', recruiter.employer_id)
         .order('created_at', { ascending: false });
 
-      if (appsError) {
-        console.error('Error fetching applications:', appsError);
-        return;
+      if (error) throw error;
+
+      if (!data) {
+        throw new Error('No applications found');
       }
 
-      console.log('Basic apps data:', basicApps); // Debug log
+      const rawData = data as unknown as RawDatabaseApplication[];
 
-      // Then fetch job and applicant details separately
-      const applications = await Promise.all(
-        basicApps.map(async (app) => {
-          // Get job details
-          const { data: job } = await supabase
-            .from('jobs')
-            .select(`
-              id,
-              title,
-              employer:employer_profiles (
-                company_name
-              )
-            `)
-            .eq('id', app.job_id)
-            .single();
+      // Transform the data to match the Application interface
+      const transformedData: Application[] = rawData.map(item => ({
+        id: item.id,
+        created_at: item.created_at,
+        status: item.status,
+        job: {
+          title: item.jobs?.title || 'Unknown Job',
+          company: item.jobs?.company || 'Unknown Company',
+          category: item.jobs?.category || 'Unknown Category'
+        },
+        applicant: {
+          id: item.applicant_profiles?.id || '',
+          full_name: item.applicant_profiles?.full_name || 'Unknown Applicant',
+          title: item.applicant_profiles?.title || null
+        }
+      }));
 
-          // Get applicant details
-          const { data: applicant } = await supabase
-            .from('applicant_profiles')
-            .select(`
-              id,
-              full_name,
-              title,
-              resume_url,
-              location,
-              phone
-            `)
-            .eq('id', app.applicant_profile_id)
-            .single();
+      setApplications(transformedData);
 
-          return {
-            ...app,
-            status: app.status as ApplicationStatus, // Ensure proper typing
-            job: {
-              ...job,
-              employer: Array.isArray(job?.employer) ? job.employer[0] : job?.employer
-            },
-            applicant
-          };
-        })
-      );
+      // Calculate stats
+      const newStats = {
+        total: transformedData.length,
+        pending: transformedData.filter(app => app.status === 'pending').length,
+        shortlisted: transformedData.filter(app => app.status === 'shortlisted').length,
+        rejected: transformedData.filter(app => app.status === 'rejected').length,
+        hired: transformedData.filter(app => app.status === 'hired').length
+      };
+      setStats(newStats);
 
-      console.log('Processed applications with status:', applications); // Debug log
-      setApplications(applications);
     } catch (error) {
-      console.error('Error in fetchApplications:', error);
+      console.error('Error fetching applications:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const isValidStatus = (status: string): status is ApplicationStatus => {
-    return ['pending', 'reviewed', 'shortlisted', 'rejected'].includes(status);
+  const filterApplications = () => {
+    let filtered = [...applications];
+
+    // Filter by status
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(app => app.status === selectedStatus);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(app => 
+        app.applicant.full_name.toLowerCase().includes(query) ||
+        app.job.title.toLowerCase().includes(query) ||
+        app.job.company.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredApplications(filtered);
   };
 
-  const handleStatusUpdate = async (applicationId: string, newStatus: ApplicationStatus) => {
+  const updateApplicationStatus = async (applicationId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from('applications')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: newStatus })
         .eq('id', applicationId);
 
-      if (error) {
-        console.error('Error updating application:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update the application in the local state immediately
-      setApplications(prevApplications => 
-        prevApplications.map(app => 
-          app.id === applicationId 
-            ? { ...app, status: newStatus }
-            : app
-        )
+      // Update local state
+      const updatedApplications = applications.map(app => 
+        app.id === applicationId ? { ...app, status: newStatus } : app
       );
+      setApplications(updatedApplications);
 
-      // Force a refresh of the applications list
-      setRefreshKey(prev => prev + 1);
+      // Update stats
+      const newStats = {
+        total: updatedApplications.length,
+        pending: updatedApplications.filter(app => app.status === 'pending').length,
+        shortlisted: updatedApplications.filter(app => app.status === 'shortlisted').length,
+        rejected: updatedApplications.filter(app => app.status === 'rejected').length,
+        hired: updatedApplications.filter(app => app.status === 'hired').length
+      };
+      setStats(newStats);
     } catch (error) {
-      console.error('Error updating status:', error);
-      // Show error to user
+      console.error('Error updating application status:', error);
     }
   };
 
-  const filteredApplications = applications.filter(app => {
-    const matchesSearch = 
-      app.applicant.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.job.title.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
-
-  const getStatusStyle = (status: ApplicationStatus) => {
-    switch (status) {
-      case 'shortlisted':
-        return { backgroundColor: '#e6f7e6' }; // Light green
-      case 'rejected':
-        return { backgroundColor: '#ffebee' }; // Light red
-      case 'reviewed':
-        return { backgroundColor: '#e3f2fd' }; // Light blue
-      case 'pending':
-      default:
-        return { backgroundColor: '#f5f5f5' }; // Light grey
-    }
-  };
-
-  const handleApplicationPress = (applicationId: string) => {
-    router.push(`/recruiter/applications/${applicationId}`);
-  };
-
-  const renderApplicationCard = (application: Application) => {
-    console.log('Rendering card with status:', application.status); // Debug log
-    
-    return (
-      <Card 
-        key={application.id}
-        style={styles.card} 
-        onPress={() => handleApplicationPress(application.id)}
-      >
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <View>
-              <Text variant="titleMedium" style={styles.name}>
-                {application.applicant.full_name}
-              </Text>
-              <Text variant="bodyMedium" style={styles.title}>
-                {application.applicant.title || 'No title provided'}
-              </Text>
-            </View>
-            <Chip 
-              mode="outlined" 
-              style={getStatusStyle(application.status)}
-            >
-              {application.status}
-            </Chip>
-          </View>
-          
-          <View style={styles.jobInfo}>
-            <Text variant="bodyMedium">
-              Applied for: {application.job.title}
-            </Text>
-            <Text variant="bodySmall" style={styles.date}>
-              Applied on: {new Date(application.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  const setupSubscription = () => {
-    const channel = supabase
-      .channel('application_updates')
-      .on('postgres_changes', 
-        {
-          event: '*',
-          schema: 'public',
-          table: 'applications'
-        },
-        (payload) => {
-          console.log('Real-time update:', payload);
-          fetchApplications();
-        }
-      )
-      .subscribe();
-
-    setSubscription(channel);
-  };
-
-  useEffect(() => {
-    console.log('Component mounted or refreshed, session:', session);
+  const onRefresh = () => {
+    setRefreshing(true);
     fetchApplications();
-    setupSubscription();
-
-    // Cleanup subscription
-    return () => {
-      if (subscription) {
-        supabase.removeChannel(subscription);
-      }
-    };
-  }, []);
-
-  // Add this to help debug
-  const debugApplications = async () => {
-    if (!session?.user?.id) return;
-    
-    try {
-      // Check recruiter profile
-      const { data: profile, error: profileError } = await supabase
-        .from('recruiter_profiles')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .single();
-        
-      console.log('Debug - Recruiter Profile:', { profile, error: profileError });
-
-      if (profile) {
-        // Check jobs
-        const { data: jobs, error: jobsError } = await supabase
-          .from('jobs')
-          .select('id')
-          .eq('employer_id', profile.employer_id);
-          
-        console.log('Debug - Jobs:', { jobs, error: jobsError });
-
-        if (jobs?.length > 0) {
-          // Check applications
-          const { data: apps, error: appsError } = await supabase
-            .from('applications')
-            .select('*')
-            .in('job_id', jobs.map(j => j.id));
-            
-          console.log('Debug - Applications:', { apps, error: appsError });
-        }
-      }
-    } catch (error) {
-      console.error('Debug error:', error);
-    }
   };
 
-  // Call debug function
-  useEffect(() => {
-    debugApplications();
-  }, []);
-
-  // Update the status filter buttons
-  const statusOptions = [
-    { value: 'all', label: 'All' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'reviewed', label: 'Reviewed' },
-    { value: 'shortlisted', label: 'Shortlisted' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4a5eff" />
+        <Text style={styles.loadingText}>Loading applications...</Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.content}>
+        <Text variant="headlineMedium" style={styles.title}>Applications</Text>
+
         <Searchbar
-          placeholder="Search applications..."
+          placeholder="Search applications"
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchbar}
         />
 
+        <View style={styles.statsContainer}>
+          <Surface style={[styles.statCard, { backgroundColor: '#4a5eff' }]}>
+            <Text style={styles.statNumber}>{stats.total}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </Surface>
+          <Surface style={[styles.statCard, { backgroundColor: '#ffd700' }]}>
+            <Text style={styles.statNumber}>{stats.pending}</Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </Surface>
+          <Surface style={[styles.statCard, { backgroundColor: '#00c853' }]}>
+            <Text style={styles.statNumber}>{stats.shortlisted}</Text>
+            <Text style={styles.statLabel}>Shortlisted</Text>
+          </Surface>
+          <Surface style={[styles.statCard, { backgroundColor: '#ff4a4a' }]}>
+            <Text style={styles.statNumber}>{stats.rejected}</Text>
+            <Text style={styles.statLabel}>Rejected</Text>
+          </Surface>
+        </View>
+
         <SegmentedButtons
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          buttons={statusOptions}
-          style={styles.filterButtons}
+          value={selectedStatus}
+          onValueChange={setSelectedStatus}
+          buttons={[
+            { value: 'all', label: 'All' },
+            ...APPLICATION_STATUSES.map(status => ({
+              value: status,
+              label: status.charAt(0).toUpperCase() + status.slice(1)
+            }))
+          ]}
+          style={styles.statusFilter}
         />
 
-        {loading ? (
-          <ActivityIndicator style={styles.loader} />
-        ) : (
-          <ScrollView style={styles.scrollView}>
-            {filteredApplications.map(application => 
-              renderApplicationCard(application)
-            )}
-            {filteredApplications.length === 0 && (
-              <View style={styles.emptyState}>
-                <Text variant="titleMedium">No applications found</Text>
-                <Text variant="bodyMedium" style={{marginTop: 8, textAlign: 'center'}}>
-                  There are no applications matching your criteria.
+        <Text variant="titleMedium" style={styles.resultsText}>
+          {filteredApplications.length} application{filteredApplications.length !== 1 ? 's' : ''} found
+        </Text>
+
+        {filteredApplications.map(application => (
+          <Card 
+            key={application.id}
+            style={styles.applicationCard}
+            onPress={() => router.push(`/recruiter/applications/${application.id}`)}
+          >
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <Avatar.Text 
+                  size={40} 
+                  label={application.applicant.full_name.charAt(0)} 
+                  style={styles.avatar}
+                />
+                <View style={styles.headerInfo}>
+                  <Text variant="titleMedium">{application.applicant.full_name}</Text>
+                  <Text variant="bodySmall">{application.applicant.title || 'No title'}</Text>
+                </View>
+                <Chip 
+                  style={[
+                    styles.statusChip,
+                    { backgroundColor: getStatusColor(application.status) }
+                  ]}
+                >
+                  {application.status}
+                </Chip>
+              </View>
+
+              <View style={styles.jobInfo}>
+                <Text variant="titleSmall" style={styles.jobTitle}>
+                  {application.job.title}
+                </Text>
+                <Text variant="bodySmall" style={styles.companyText}>
+                  {application.job.company}
+                </Text>
+                <Text variant="bodySmall" style={styles.dateText}>
+                  Applied {new Date(application.created_at).toLocaleDateString()}
                 </Text>
               </View>
-            )}
-          </ScrollView>
-        )}
+
+              <View style={styles.actions}>
+                {APPLICATION_STATUSES.map(status => (
+                  status !== application.status && (
+                    <Button
+                      key={status}
+                      mode="outlined"
+                      onPress={() => updateApplicationStatus(application.id, status)}
+                      style={styles.actionButton}
+                      textColor="#4a5eff"
+                    >
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </Button>
+                  )
+                ))}
+              </View>
+            </Card.Content>
+          </Card>
+        ))}
       </View>
-    </View>
+    </ScrollView>
   );
 }
+
+const getStatusColor = (status: string): string => {
+  switch (status) {
+    case 'pending':
+      return '#ffd700';
+    case 'shortlisted':
+      return '#4a5eff';
+    case 'rejected':
+      return '#ff4a4a';
+    case 'hired':
+      return '#00c853';
+    default:
+      return '#e0e0e0';
+  }
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   content: {
-    padding: 20,
-    flex: 1,
+    padding: 16,
   },
-  scrollView: {
-    flex: 1,
-  },
-  searchbar: {
-    marginBottom: 15,
-  },
-  filterButtons: {
-    marginBottom: 20,
-  },
-  card: {
-    marginBottom: 12,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  name: {
-    fontWeight: '600',
-  },
-  title: {
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  jobInfo: {
-    marginTop: 8,
-  },
-  date: {
-    opacity: 0.5,
-    marginTop: 4,
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  emptyState: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#666',
+  },
+  title: {
+    marginBottom: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  searchbar: {
+    marginBottom: 16,
+    elevation: 2,
+    backgroundColor: '#fff',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#fff',
+    marginTop: 4,
+  },
+  statusFilter: {
+    marginBottom: 16,
+  },
+  resultsText: {
+    marginBottom: 16,
+    color: '#666',
+  },
+  applicationCard: {
+    marginBottom: 12,
+    borderRadius: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatar: {
+    marginRight: 12,
+    backgroundColor: '#e6e6fe',
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  statusChip: {
+    borderRadius: 12,
+  },
+  jobInfo: {
+    marginBottom: 12,
+  },
+  jobTitle: {
+    color: '#4a5eff',
+    marginBottom: 4,
+  },
+  companyText: {
+    color: '#666',
+    marginBottom: 4,
+  },
+  dateText: {
+    color: '#999',
+  },
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  actionButton: {
+    borderColor: '#4a5eff',
+    borderRadius: 12,
   },
 }); 

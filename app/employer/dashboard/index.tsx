@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Button, Title, Searchbar } from 'react-native-paper';
+import { Text, Card, Button, Title, Searchbar, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -18,6 +18,15 @@ export default function EmployerJobsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   const fetchJobs = async () => {
     try {
@@ -73,7 +82,15 @@ export default function EmployerJobsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Title style={styles.title}>Posted Jobs</Title>
+      <View style={styles.header}>
+        <Title style={styles.title}>Posted Jobs</Title>
+        <IconButton
+          icon="logout"
+          size={24}
+          onPress={handleSignOut}
+          style={styles.signOutButton}
+        />
+      </View>
 
       <View style={styles.filters}>
         <Searchbar
@@ -128,5 +145,14 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  signOutButton: {
+    marginLeft: 'auto',
   },
 }); 

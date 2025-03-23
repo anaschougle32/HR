@@ -1,14 +1,27 @@
 import { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Linking, Alert } from 'react-native';
-import { Text, Card, Button, Chip, ActivityIndicator, Avatar, Portal, Dialog, Divider } from 'react-native-paper';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { View, StyleSheet, ScrollView, RefreshControl, Linking } from 'react-native';
+import { 
+  Text, 
+  Card, 
+  Button, 
+  Chip, 
+  ActivityIndicator, 
+  Surface,
+  IconButton,
+  Avatar,
+  Portal,
+  Dialog,
+  Divider
+} from 'react-native-paper';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface ApplicationDetails {
   id: string;
-  created_at: string;
   status: string;
+  created_at: string;
   notes: string | null;
   job: {
     id: string;
@@ -29,62 +42,25 @@ interface ApplicationDetails {
   };
 }
 
-interface RawDatabaseApplication {
-  id: string;
-  created_at: string;
+interface ConfirmDialog {
+  visible: boolean;
+  title: string;
+  message: string;
   status: string;
-  notes: string | null;
-  jobs: {
-    id: string;
-    title: string;
-    company: string;
-    category: string;
-    description: string;
-    requirements: string;
-  };
-  applicant_profiles: {
-    id: string;
-    full_name: string;
-    title: string | null;
-    location: string | null;
-    experience: string | null;
-    skills: string[] | null;
-    resume_url: string | null;
-  };
-}
-
-interface ApplicationWithJob {
-  id: string;
-  created_at: string;
-  status: string;
-  notes: string | null;
-  applicant_id: string;
-  jobs: {
-    id: string;
-    title: string;
-    company: string;
-    category: string;
-    description: string;
-    requirements: string;
-  } | null;
 }
 
 export default function ApplicationDetailsScreen() {
-  const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { id } = useLocalSearchParams();
   const { session } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [application, setApplication] = useState<ApplicationDetails | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    visible: boolean;
-    status: string;
-    title: string;
-    message: string;
-  }>({
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog>({
     visible: false,
-    status: '',
     title: '',
-    message: ''
+    message: '',
+    status: ''
   });
 
   useEffect(() => {
@@ -97,7 +73,6 @@ export default function ApplicationDetailsScreen() {
     try {
       setLoading(true);
 
-      // First fetch the application with job details
       const { data: applicationData, error: applicationError } = await supabase
         .from('applications')
         .select(`
@@ -105,56 +80,53 @@ export default function ApplicationDetailsScreen() {
           created_at,
           status,
           notes,
-          applicant_id,
-          jobs!inner (
+          job:jobs!inner (
             id,
             title,
             company,
             category,
             description,
             requirements
+          ),
+          applicant:applicant_profiles!inner (
+            id,
+            full_name,
+            title,
+            location,
+            experience,
+            skills,
+            resume_url
           )
         `)
         .eq('id', id)
         .single();
 
       if (applicationError) throw applicationError;
-      if (!applicationData) throw new Error('Application not found');
 
-      const typedApplicationData = applicationData as unknown as ApplicationWithJob;
-      if (!typedApplicationData.jobs) throw new Error('Job not found');
+      if (!applicationData || !Array.isArray(applicationData.job) || !Array.isArray(applicationData.applicant)) {
+        throw new Error('Application not found');
+      }
 
-      // Then fetch the applicant details separately
-      const { data: applicantData, error: applicantError } = await supabase
-        .from('applicant_profiles')
-        .select(`
-          id,
-          full_name,
-          title,
-          location,
-          experience,
-          skills,
-          resume_url
-        `)
-        .eq('id', typedApplicationData.applicant_id)
-        .single();
+      const jobData = applicationData.job[0];
+      const applicantData = applicationData.applicant[0];
 
-      if (applicantError) throw applicantError;
-      if (!applicantData) throw new Error('Applicant not found');
+      if (!jobData || !applicantData) {
+        throw new Error('Application data is incomplete');
+      }
 
-      // Transform the data to match the ApplicationDetails interface
+      // Transform the data to match ApplicationDetails interface
       const transformedData: ApplicationDetails = {
-        id: typedApplicationData.id,
-        created_at: typedApplicationData.created_at,
-        status: typedApplicationData.status,
-        notes: typedApplicationData.notes,
+        id: applicationData.id,
+        status: applicationData.status,
+        created_at: applicationData.created_at,
+        notes: applicationData.notes,
         job: {
-          id: typedApplicationData.jobs.id,
-          title: typedApplicationData.jobs.title,
-          company: typedApplicationData.jobs.company,
-          category: typedApplicationData.jobs.category,
-          description: typedApplicationData.jobs.description,
-          requirements: typedApplicationData.jobs.requirements
+          id: jobData.id,
+          title: jobData.title,
+          company: jobData.company,
+          category: jobData.category,
+          description: jobData.description,
+          requirements: jobData.requirements
         },
         applicant: {
           id: applicantData.id,
@@ -170,10 +142,15 @@ export default function ApplicationDetailsScreen() {
       setApplication(transformedData);
     } catch (error) {
       console.error('Error fetching application details:', error);
-      router.back();
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchApplicationDetails();
   };
 
   const updateApplicationStatus = async (newStatus: string) => {
@@ -185,8 +162,8 @@ export default function ApplicationDetailsScreen() {
 
       if (error) throw error;
 
-      setApplication(prev => prev ? { ...prev, status: newStatus } : null);
       setConfirmDialog(prev => ({ ...prev, visible: false }));
+      fetchApplicationDetails();
     } catch (error) {
       console.error('Error updating application status:', error);
     }
@@ -218,29 +195,19 @@ export default function ApplicationDetailsScreen() {
 
   const handleResumeDownload = async (resumeUrl: string) => {
     try {
-      // The resumeUrl should already be a complete URL from Supabase storage
       if (!resumeUrl.startsWith('http')) {
         throw new Error('Invalid resume URL');
       }
-
-      // Open the URL directly in the device's browser
       await Linking.openURL(resumeUrl);
     } catch (error) {
       console.error('Error downloading resume:', error);
-      // Show error message to user
-      Alert.alert(
-        'Error',
-        'Could not open the resume. Please try again later.',
-        [{ text: 'OK' }]
-      );
     }
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4a5eff" />
-        <Text style={styles.loadingText}>Loading application details...</Text>
+        <ActivityIndicator size="large" />
       </View>
     );
   }
@@ -254,9 +221,30 @@ export default function ApplicationDetailsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
+    >
+      <Surface style={styles.header} elevation={2}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              onPress={() => router.back()}
+            />
+            <Text variant="headlineMedium" style={styles.title}>
+              Application Details
+            </Text>
+          </View>
+        </View>
+      </Surface>
+
       <View style={styles.content}>
-        <Card style={styles.applicantCard}>
+        {/* Applicant Card */}
+        <Card style={styles.card}>
           <Card.Content>
             <View style={styles.applicantHeader}>
               <Avatar.Text 
@@ -265,76 +253,88 @@ export default function ApplicationDetailsScreen() {
                 style={styles.avatar}
               />
               <View style={styles.applicantInfo}>
-                <Text variant="headlineSmall" style={styles.name}>
-                  {application.applicant.full_name}
+                <Text variant="titleLarge">{application.applicant.full_name}</Text>
+                <Text variant="titleMedium" style={styles.subtitle}>
+                  {application.applicant.title || 'No title provided'}
                 </Text>
-                <Text variant="bodyLarge" style={styles.title}>
-                  {application.applicant.title || 'No title'}
-                </Text>
-                {application.applicant.location && (
+                <View style={styles.locationContainer}>
+                  <MaterialCommunityIcons name="map-marker" size={16} color="#666" />
                   <Text variant="bodyMedium" style={styles.location}>
-                    📍 {application.applicant.location}
+                    {application.applicant.location || 'Location not specified'}
                   </Text>
-                )}
+                </View>
               </View>
               <Chip 
                 style={[styles.statusChip, { backgroundColor: getStatusColor(application.status) }]}
+                textStyle={{ color: '#fff' }}
               >
                 {application.status}
               </Chip>
             </View>
 
-            <Divider style={styles.divider} />
-
-            <View style={styles.section}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>Applied Position</Text>
-              <Card style={styles.jobCard}>
-                <Card.Content>
-                  <Text variant="titleLarge">{application.job.title}</Text>
-                  <Text variant="bodyLarge" style={styles.company}>{application.job.company}</Text>
-                  <Chip style={styles.categoryChip}>{application.job.category}</Chip>
-                </Card.Content>
-              </Card>
-            </View>
-
-            {application.applicant.experience && (
-              <View style={styles.section}>
-                <Text variant="titleMedium" style={styles.sectionTitle}>Experience</Text>
-                <Text variant="bodyMedium">{application.applicant.experience}</Text>
-              </View>
-            )}
-
             {application.applicant.skills && application.applicant.skills.length > 0 && (
-              <View style={styles.section}>
+              <>
+                <Divider style={styles.divider} />
                 <Text variant="titleMedium" style={styles.sectionTitle}>Skills</Text>
-                <View style={styles.skillsContainer}>
+                <View style={styles.skills}>
                   {application.applicant.skills.map((skill, index) => (
-                    <Chip key={index} style={styles.skillChip}>{skill}</Chip>
+                    <Chip 
+                      key={index}
+                      style={styles.skillChip}
+                      textStyle={styles.skillText}
+                    >
+                      {skill}
+                    </Chip>
                   ))}
                 </View>
-              </View>
+              </>
+            )}
+
+            {application.applicant.experience && (
+              <>
+                <Divider style={styles.divider} />
+                <Text variant="titleMedium" style={styles.sectionTitle}>Experience</Text>
+                <Text variant="bodyMedium">{application.applicant.experience}</Text>
+              </>
             )}
 
             {application.applicant.resume_url && (
-              <View style={styles.section}>
-                <Text variant="titleMedium" style={styles.sectionTitle}>Resume</Text>
-                <Button 
-                  mode="contained-tonal" 
-                  icon="file-document" 
+              <>
+                <Divider style={styles.divider} />
+                <Button
+                  mode="outlined"
+                  icon="file-download"
                   onPress={() => handleResumeDownload(application.applicant.resume_url!)}
+                  style={styles.resumeButton}
                 >
-                  View Resume
+                  Download Resume
                 </Button>
-              </View>
+              </>
             )}
+          </Card.Content>
+        </Card>
 
-            <View style={styles.section}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>Application Timeline</Text>
-              <Text variant="bodyMedium">
-                Applied on {new Date(application.created_at).toLocaleDateString()}
-              </Text>
+        {/* Applied Position Card */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Applied Position</Text>
+            <View style={styles.jobInfo}>
+              <Text variant="titleLarge">{application.job.title}</Text>
+              <Text variant="titleMedium" style={styles.subtitle}>{application.job.company}</Text>
+              <Chip style={styles.categoryChip}>{application.job.category}</Chip>
             </View>
 
+            <Divider style={styles.divider} />
+            <Text variant="titleMedium" style={styles.sectionTitle}>Application Timeline</Text>
+            <Text variant="bodyMedium">
+              Applied on {new Date(application.created_at).toLocaleDateString()}
+            </Text>
+          </Card.Content>
+        </Card>
+
+        {/* Action Buttons */}
+        <Card style={styles.card}>
+          <Card.Content>
             <View style={styles.actions}>
               {application.status !== 'shortlisted' && (
                 <Button 
@@ -349,7 +349,7 @@ export default function ApplicationDetailsScreen() {
                 <Button 
                   mode="contained"
                   onPress={() => handleStatusUpdate('rejected')}
-                  style={[styles.actionButton, { backgroundColor: '#ff4a4a' }]}
+                  style={[styles.actionButton, { backgroundColor: '#dc3545' }]}
                 >
                   Reject
                 </Button>
@@ -358,7 +358,7 @@ export default function ApplicationDetailsScreen() {
                 <Button 
                   mode="contained"
                   onPress={() => handleStatusUpdate('hired')}
-                  style={[styles.actionButton, { backgroundColor: '#00c853' }]}
+                  style={[styles.actionButton, { backgroundColor: '#28a745' }]}
                 >
                   Hire
                 </Button>
@@ -391,44 +391,44 @@ export default function ApplicationDetailsScreen() {
   );
 }
 
-const getStatusColor = (status: string): string => {
-  switch (status) {
-    case 'pending':
-      return '#ffd700';
-    case 'shortlisted':
-      return '#4a5eff';
-    case 'rejected':
-      return '#ff4a4a';
-    case 'hired':
-      return '#00c853';
-    default:
-      return '#e0e0e0';
-  }
-};
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
-  },
-  content: {
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 12,
-    color: '#666',
+  header: {
+    backgroundColor: '#fff',
+    marginBottom: 16,
   },
-  applicantCard: {
-    borderRadius: 12,
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingRight: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  content: {
+    padding: 16,
+    gap: 16,
+  },
+  card: {
+    backgroundColor: '#fff',
   },
   applicantHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 16,
   },
   avatar: {
@@ -438,59 +438,67 @@ const styles = StyleSheet.create({
   applicantInfo: {
     flex: 1,
   },
-  name: {
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  title: {
+  subtitle: {
     color: '#666',
-    marginBottom: 4,
+    marginTop: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   location: {
     color: '#666',
+    marginLeft: 4,
   },
   statusChip: {
-    borderRadius: 12,
+    marginLeft: 'auto',
   },
   divider: {
     marginVertical: 16,
   },
-  section: {
-    marginBottom: 24,
-  },
   sectionTitle: {
+    fontWeight: 'bold',
     marginBottom: 12,
-    color: '#333',
-    fontWeight: '500',
   },
-  jobCard: {
-    backgroundColor: '#f5f7ff',
-  },
-  company: {
-    color: '#666',
-    marginVertical: 4,
-  },
-  categoryChip: {
-    marginTop: 8,
-    backgroundColor: '#e6e6fe',
-    alignSelf: 'flex-start',
-  },
-  skillsContainer: {
+  skills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
   skillChip: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f0f2ff',
+  },
+  skillText: {
+    color: '#4a5eff',
+  },
+  resumeButton: {
+    marginTop: 8,
+  },
+  jobInfo: {
+    marginBottom: 16,
+  },
+  categoryChip: {
+    marginTop: 8,
+    backgroundColor: '#f0f2ff',
+    alignSelf: 'flex-start',
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 16,
+    gap: 12,
   },
   actionButton: {
     flex: 1,
-    borderRadius: 12,
   },
-}); 
+});
+
+const getStatusColor = (status: string): string => {
+  switch (status) {
+    case 'pending': return '#ffc107';
+    case 'shortlisted': return '#4a5eff';
+    case 'rejected': return '#dc3545';
+    case 'hired': return '#28a745';
+    default: return '#6c757d';
+  }
+}; 
