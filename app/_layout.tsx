@@ -30,18 +30,6 @@ export default function RootLayout() {
           'Montserrat-SemiBold': require('../assets/fonts/Montserrat-SemiBold.ttf'),
           'Montserrat-Bold': require('../assets/fonts/Montserrat-Bold.ttf'),
           
-          // Lexend
-          'Lexend': require('../assets/fonts/Lexend-Regular.ttf'),
-          'Lexend-Medium': require('../assets/fonts/Lexend-Medium.ttf'),
-          'Lexend-SemiBold': require('../assets/fonts/Lexend-SemiBold.ttf'),
-          'Lexend-Bold': require('../assets/fonts/Lexend-Bold.ttf'),
-          
-          // Inter
-          'Inter': require('../assets/fonts/Inter-Regular.ttf'),
-          'Inter-Medium': require('../assets/fonts/Inter-Medium.ttf'),
-          'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
-          'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
-          
           // Verdana is a system font, no need to load it
         });
         
