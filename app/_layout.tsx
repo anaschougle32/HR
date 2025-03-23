@@ -4,14 +4,51 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { PaperProvider } from 'react-native-paper';
 import { NotificationsProvider } from '../contexts/NotificationsContext';
 import theme from './theme';
+import * as Font from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 // Root layout must be exported as default
 export default function RootLayout() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        // Load fonts
+        await Font.loadAsync({
+          'Poppins': require('@/assets/fonts/Poppins-Regular.ttf'),
+          'Poppins-Medium': require('@/assets/fonts/Poppins-Medium.ttf'),
+          'Poppins-SemiBold': require('@/assets/fonts/Poppins-SemiBold.ttf'),
+          'Poppins-Bold': require('@/assets/fonts/Poppins-Bold.ttf'),
+        });
+      } catch (e) {
+        console.warn('Error loading fonts:', e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+
+    prepare();
+  }, []);
+
+  useEffect(() => {
+    if (appIsReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
+    return null;
+  }
+
   return (
     <PaperProvider theme={theme}>
       <AuthProvider>
         <NotificationsProvider>
-          <Stack screenOptions={{ headerShown: false }} />
+          <RootLayoutNav />
         </NotificationsProvider>
       </AuthProvider>
     </PaperProvider>
